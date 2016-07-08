@@ -1,0 +1,94 @@
+- hosts: es_nodes
+  tasks:
+  - name: Install java-1.8.0-openjdk
+    yum: name=java-1.8.0-openjdk state=present
+    register: javainstalled
+
+  - name: Install wget
+    yum: name=wget state=present
+    when: javainstalled|success
+    register: wgetinstalled
+
+  - name: Download and install Elasticsearch
+    get_url: url=https://download.elasticsearch.org/elasticsearch/release/org/elasticsearch/distribution/rpm/elasticsearch/2.2.0/elasticsearch-2.2.0.rpm dest=~/ validate_certs=no
+    when: wgetinstalled|success
+    register: ES_downloaded
+
+  - name: install Elasticsearch
+    yum: name=/root/elasticsearch-2.2.0.rpm state=present
+    when: ES_downloaded
+    register: Elasticsearch_installed
+
+  - name: Download license plugin
+    get_url: url=https://download.elastic.co/elasticsearch/release/org/elasticsearch/plugin/license/2.2.0/license-2.2.0.zip dest=/usr/share/elasticsearch/bin/ validate_certs=no
+    register: license_downloaded
+
+  - name: Download marvel-agent
+    get_url: url=https://download.elastic.co/elasticsearch/release/org/elasticsearch/plugin/marvel-agent/2.2.0/marvel-agent-2.2.0.zip dest=/usr/share/elasticsearch/bin/ validate_certs=no
+    register: marvel_agent_downloaded
+
+  - name: install libselinux-python
+    yum: name=libselinux-python state=latest
+
+  - name: Install license
+    shell: /usr/share/elasticsearch/bin/plugin install file:///usr/share/elasticsearch/bin/license-2.2.0.zip
+    when: license_downloaded
+
+  - name: Install marvel-agent
+    shell: /usr/share/elasticsearch/bin/plugin install file:///usr/share/elasticsearch/bin/marvel-agent-2.2.0.zip
+    when: marvel_agent_downloaded
+
+  - name: disable iptables
+    service: name=iptables enabled=no state=stopped
+
+  - name: set node.name
+    lineinfile: >
+      dest=/etc/elasticsearch/elasticsearch.yml
+      line='node.name: es6'
+      regexp='^node.name:'
+      insertafter='^# node.name'
+    notify: restart elasticsearch
+
+  - name: set cluster.name
+    lineinfile: >
+      dest=/etc/elasticsearch/elasticsearch.yml
+      line='cluster.name: elkpoc'
+      regexp='^cluster.name:'
+      insertafter='^# cluster.name'
+    notify: restart elasticsearch
+
+  - name: set network.host 
+    lineinfile: >
+      dest=/etc/elasticsearch/elasticsearch.yml
+      line='network.host: 10.120.35.29'
+      regexp='^network.host:'
+      insertafter='^# network.host'
+    notify: restart elasticsearch
+
+  - name: set node.data as true
+    lineinfile: >
+      dest=/etc/elasticsearch/elasticsearch.yml
+      line='node.data: true'
+      regexp='^node.data:'
+      insertafter='^# node.data'
+    notify: restart elasticsearch
+
+  - name: set heap size
+    lineinfile: >
+      dest=/etc/sysconfig/elasticsearch
+      line='ES_HEAP_SIZE=4g'
+      regexp='^ES_HEAP_SIZE'
+      insertafter='^#ES_HEAP_SIZE'
+    notify: restart elasticsearch
+
+  - name: set zen discovery hosts
+    lineinfile: >
+      dest=/etc/elasticsearch/elasticsearch.yml
+      line='discovery.zen.ping.unicast.hosts: ["10.120.35.21", "10.120.35.22", "10.120.35.23", "10.120.35.25"]'
+      regexp='^discovery.zen.ping.unicast.hosts'
+      insertafter='^#discovery.zen.ping.unicast.hosts'
+    notify: restart elasticsearch
+
+
+  - name: enable and restart elasticsearch
+    service: name=elasticsearch enabled=yes state=restarted
